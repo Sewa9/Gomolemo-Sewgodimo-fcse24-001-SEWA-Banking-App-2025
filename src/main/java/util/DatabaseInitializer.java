@@ -15,21 +15,17 @@ public class DatabaseInitializer {
                 System.out.println("Database initialized successfully!");
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            // If tables already exist, just continue
+            System.out.println("Database already initialized: " + e.getMessage());
         }
     }
 
     private static void createTables(Connection conn) throws SQLException {
         Statement stmt = conn.createStatement();
 
-        // Drop tables if they exist to ensure schema is up to date
-        stmt.execute("DROP TABLE IF EXISTS transactions");
-        stmt.execute("DROP TABLE IF EXISTS accounts");
-        stmt.execute("DROP TABLE IF EXISTS customers");
-
-        // Customers table
+        // Use IF NOT EXISTS to avoid errors if tables already exist
         stmt.execute("""
-                    CREATE TABLE customers (
+                    CREATE TABLE IF NOT EXISTS customers (
                         id TEXT PRIMARY KEY,
                         first_name TEXT NOT NULL,
                         last_name TEXT NOT NULL,
@@ -39,9 +35,8 @@ public class DatabaseInitializer {
                     );
                 """);
 
-        // Accounts table
         stmt.execute("""
-                    CREATE TABLE accounts (
+                    CREATE TABLE IF NOT EXISTS accounts (
                         accountNumber TEXT PRIMARY KEY,
                         type TEXT NOT NULL,
                         balance REAL NOT NULL,
@@ -51,9 +46,8 @@ public class DatabaseInitializer {
                     );
                 """);
 
-        // Transactions table
         stmt.execute("""
-                    CREATE TABLE transactions (
+                    CREATE TABLE IF NOT EXISTS transactions (
                         transaction_id TEXT PRIMARY KEY,
                         account_number TEXT NOT NULL,
                         type TEXT NOT NULL,
@@ -63,9 +57,8 @@ public class DatabaseInitializer {
                     );
                 """);
 
-        // Users table for authentication
         stmt.execute("""
-                    CREATE TABLE users (
+                    CREATE TABLE IF NOT EXISTS users (
                         username TEXT PRIMARY KEY,
                         password TEXT NOT NULL,
                         role TEXT NOT NULL
@@ -74,95 +67,55 @@ public class DatabaseInitializer {
     }
 
     private static void insertSampleData(Connection conn) throws SQLException {
-        // Insert Customers
+        // Insert Customers - use INSERT OR IGNORE to avoid duplicates
         PreparedStatement psCustomer = conn.prepareStatement(
                 "INSERT OR IGNORE INTO customers (id, first_name, last_name, address) VALUES (?, ?, ?, ?)");
 
-        psCustomer.setString(1, "C001");
-        psCustomer.setString(2, "John");
-        psCustomer.setString(3, "Doe");
-        psCustomer.setString(4, "Gaborone");
-        psCustomer.executeUpdate();
+        // Sample customers
+        String[][] sampleCustomers = {
+                { "C001", "John", "Doe", "Gaborone" },
+                { "C002", "Jane", "Smith", "Francistown" },
+                { "C003", "Alice", "Johnson", "Maun" },
+                { "gsewa", "Gomolemo", "Sewa", "Gaborone" },
+                { "kagos", "Kagiso", "Moloi", "Francistown" },
+                { "sdelu", "Sandra", "Delu", "Maun" }
+        };
 
-        psCustomer.setString(1, "C002");
-        psCustomer.setString(2, "Jane");
-        psCustomer.setString(3, "Smith");
-        psCustomer.setString(4, "Francistown");
-        psCustomer.executeUpdate();
+        for (String[] customer : sampleCustomers) {
+            psCustomer.setString(1, customer[0]);
+            psCustomer.setString(2, customer[1]);
+            psCustomer.setString(3, customer[2]);
+            psCustomer.setString(4, customer[3]);
+            psCustomer.executeUpdate();
+        }
 
-        psCustomer.setString(1, "C003");
-        psCustomer.setString(2, "Alice");
-        psCustomer.setString(3, "Johnson");
-        psCustomer.setString(4, "Maun");
-        psCustomer.executeUpdate();
-
-        // Insert Accounts
+        // Insert Accounts - use INSERT OR IGNORE to avoid duplicates
         PreparedStatement psAccount = conn.prepareStatement(
                 "INSERT OR IGNORE INTO accounts (accountNumber, type, balance, branch, customerId) VALUES (?, ?, ?, ?, ?)");
 
-        psAccount.setString(1, "S001");
-        psAccount.setString(2, "SavingsAccount");
-        psAccount.setDouble(3, 1000.0);
-        psAccount.setString(4, "MainBranch");
-        psAccount.setString(5, "C001");
-        psAccount.executeUpdate();
+        // Sample accounts
+        String[][] sampleAccounts = {
+                { "S001", "SavingsAccount", "1000.0", "MainBranch", "C001" },
+                { "CH001", "ChequingAccount", "500.0", "MainBranch", "C001" },
+                { "I001", "InvestmentAccount", "5000.0", "MainBranch", "C002" },
+                { "S002", "SavingsAccount", "2000.0", "WestBranch", "C003" },
+                { "S378848", "SavingsAccount", "900.0", "MainBranch", "gsewa" },
+                { "C123456", "ChequingAccount", "1500.0", "MainBranch", "kagos" },
+                { "S789012", "SavingsAccount", "2500.0", "MainBranch", "sdelu" }
+        };
 
-        psAccount.setString(1, "CH001");
-        psAccount.setString(2, "ChequingAccount");
-        psAccount.setDouble(3, 500.0);
-        psAccount.setString(4, "MainBranch");
-        psAccount.setString(5, "C001");
-        psAccount.executeUpdate();
+        for (String[] account : sampleAccounts) {
+            psAccount.setString(1, account[0]);
+            psAccount.setString(2, account[1]);
+            psAccount.setDouble(3, Double.parseDouble(account[2]));
+            psAccount.setString(4, account[3]);
+            psAccount.setString(5, account[4]);
+            psAccount.executeUpdate();
+        }
 
-        psAccount.setString(1, "I001");
-        psAccount.setString(2, "InvestmentAccount");
-        psAccount.setDouble(3, 5000.0);
-        psAccount.setString(4, "MainBranch");
-        psAccount.setString(5, "C002");
-        psAccount.executeUpdate();
-
-        psAccount.setString(1, "S002");
-        psAccount.setString(2, "SavingsAccount");
-        psAccount.setDouble(3, 2000.0);
-        psAccount.setString(4, "WestBranch");
-        psAccount.setString(5, "C003");
-        psAccount.executeUpdate();
-
-        // Insert Transactions
-        PreparedStatement psTxn = conn.prepareStatement(
-                "INSERT OR IGNORE INTO transactions (transaction_id, account_number, type, amount, timestamp) VALUES (?, ?, ?, ?, ?)");
-
-        psTxn.setString(1, "T001");
-        psTxn.setString(2, "S001");
-        psTxn.setString(3, "Deposit");
-        psTxn.setDouble(4, 1000.0);
-        psTxn.setString(5, "2025-11-17 09:00:00");
-        psTxn.executeUpdate();
-
-        psTxn.setString(1, "T002");
-        psTxn.setString(2, "CH001");
-        psTxn.setString(3, "Deposit");
-        psTxn.setDouble(4, 500.0);
-        psTxn.setString(5, "2025-11-17 09:05:00");
-        psTxn.executeUpdate();
-
-        psTxn.setString(1, "T003");
-        psTxn.setString(2, "I001");
-        psTxn.setString(3, "Deposit");
-        psTxn.setDouble(4, 5000.0);
-        psTxn.setString(5, "2025-11-17 09:10:00");
-        psTxn.executeUpdate();
-
-        psTxn.setString(1, "T004");
-        psTxn.setString(2, "S001");
-        psTxn.setString(3, "Withdrawal");
-        psTxn.setDouble(4, 200.0);
-        psTxn.setString(5, "2025-11-17 09:15:00");
-        psTxn.executeUpdate();
-
-        // Insert Users
+        // Insert Users - use INSERT OR IGNORE to avoid duplicates
         PreparedStatement psUser = conn.prepareStatement(
-                "INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)");
+                "INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)");
 
         // Admin users
         psUser.setString(1, "admin");
@@ -186,20 +139,23 @@ public class DatabaseInitializer {
         psUser.setString(3, "employee");
         psUser.executeUpdate();
 
-        // Customer users - one for each sample customer
-        psUser.setString(1, "C001");
-        psUser.setString(2, "pass123");
-        psUser.setString(3, "customer");
-        psUser.executeUpdate();
+        // Customer users
+        String[][] customerUsers = {
+                { "C001", "pass123", "customer" },
+                { "C002", "pass123", "customer" },
+                { "C003", "pass123", "customer" },
+                { "gsewa", "pass123", "customer" },
+                { "kagos", "pass123", "customer" },
+                { "sdelu", "pass123", "customer" }
+        };
 
-        psUser.setString(1, "C002");
-        psUser.setString(2, "pass123");
-        psUser.setString(3, "customer");
-        psUser.executeUpdate();
+        for (String[] user : customerUsers) {
+            psUser.setString(1, user[0]);
+            psUser.setString(2, user[1]);
+            psUser.setString(3, user[2]);
+            psUser.executeUpdate();
+        }
 
-        psUser.setString(1, "C003");
-        psUser.setString(2, "pass123");
-        psUser.setString(3, "customer");
-        psUser.executeUpdate();
+        System.out.println("Sample data inserted successfully!");
     }
 }

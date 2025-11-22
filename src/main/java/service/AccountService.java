@@ -13,10 +13,22 @@ public class AccountService {
     private AccountDAO accountDAO = new AccountDAO();
     private TransactionDAO transactionDAO = new TransactionDAO();
 
-    // Open account
+    // Open account - FIXED to ensure proper customer linking
     public void openAccount(Account account) {
+        System.out.println("DEBUG: AccountService.openAccount() called for account: " + account.getAccountNumber());
+        System.out.println("DEBUG: Customer ID: " + account.getCustomer().getId());
+        
         accountDAO.addAccount(account);
-        account.getCustomer().addAccount(account); // link account to customer
+        
+        // FIX: Ensure customer account list is updated
+        if (account.getCustomer() != null) {
+            account.getCustomer().addAccount(account);
+            System.out.println("DEBUG: Account added to customer's account list");
+        } else {
+            System.out.println("DEBUG: WARNING - Customer is null in account!");
+        }
+        
+        System.out.println("DEBUG: Account opened successfully");
     }
 
     // Deposit funds
@@ -54,9 +66,15 @@ public class AccountService {
         return false;
     }
 
-    // List all accounts for a customer
+    // List all accounts for a customer - FIXED to ensure proper retrieval
     public List<Account> getCustomerAccounts(String customerId) {
-        return accountDAO.getCustomerAccounts(customerId);
+        System.out.println("DEBUG: AccountService.getCustomerAccounts() called for customer: " + customerId);
+        List<Account> accounts = accountDAO.getCustomerAccounts(customerId);
+        System.out.println("DEBUG: Retrieved " + accounts.size() + " accounts for customer " + customerId);
+        for (Account acc : accounts) {
+            System.out.println("DEBUG: Account " + acc.getAccountNumber() + " - Balance: " + acc.getBalance() + " - Customer: " + acc.getCustomer().getId());
+        }
+        return accounts;
     }
 
     // Calculate monthly interest for an account

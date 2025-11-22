@@ -72,7 +72,7 @@ public class EmployeeDashboardGUI {
                 });
 
                 // --- Account Table & Search ---
-                TextField txtAccountSearch = new TextField();
+                txtAccountSearch = new TextField();
                 txtAccountSearch.setPromptText("Search accounts");
 
                 accountTable = new TableView<>();
@@ -184,19 +184,18 @@ public class EmployeeDashboardGUI {
                 grid.setPadding(new Insets(20, 150, 10, 10));
 
                 TextField txtId = new TextField();
-                txtId.setPromptText("Customer ID");
+                txtId.setPromptText("Customer ID (This will be login username)");
                 TextField txtFirstName = new TextField();
                 txtFirstName.setPromptText("First Name");
                 TextField txtLastName = new TextField();
                 txtLastName.setPromptText("Last Name");
                 TextField txtAddress = new TextField();
                 txtAddress.setPromptText("Address");
-                TextField txtUsername = new TextField();
-                txtUsername.setPromptText("Username");
                 PasswordField txtPassword = new PasswordField();
-                txtPassword.setPromptText("Password");
+                txtPassword.setPromptText("Password (default: pass123)");
+                txtPassword.setText("pass123"); // Set default password
 
-                grid.add(new Label("ID:"), 0, 0);
+                grid.add(new Label("Customer ID/Username:"), 0, 0);
                 grid.add(txtId, 1, 0);
                 grid.add(new Label("First Name:"), 0, 1);
                 grid.add(txtFirstName, 1, 1);
@@ -204,10 +203,8 @@ public class EmployeeDashboardGUI {
                 grid.add(txtLastName, 1, 2);
                 grid.add(new Label("Address:"), 0, 3);
                 grid.add(txtAddress, 1, 3);
-                grid.add(new Label("Username:"), 0, 4);
-                grid.add(txtUsername, 1, 4);
-                grid.add(new Label("Password:"), 0, 5);
-                grid.add(txtPassword, 1, 5);
+                grid.add(new Label("Password:"), 0, 4);
+                grid.add(txtPassword, 1, 4);
 
                 dialog.getDialogPane().setContent(grid);
 
@@ -217,21 +214,30 @@ public class EmployeeDashboardGUI {
                                 String firstName = txtFirstName.getText();
                                 String lastName = txtLastName.getText();
                                 String address = txtAddress.getText();
-                                String username = txtUsername.getText();
                                 String password = txtPassword.getText();
+
                                 if (id != null && !id.isEmpty() && firstName != null && !firstName.isEmpty() &&
                                                 lastName != null && !lastName.isEmpty() && address != null
                                                 && !address.isEmpty() &&
-                                                username != null && !username.isEmpty() && password != null
-                                                && !password.isEmpty()) {
+                                                password != null && !password.isEmpty()) {
+
+                                        System.out.println("DEBUG: Creating customer with ID: " + id + " and password: "
+                                                        + password);
+
+                                        // Create customer
                                         Customer customer = new Customer(id, firstName, lastName, address);
-                                        controller.addCustomer(customer);
-                                        controller.registerUser(username, password, "customer");
+                                        controller.registerCustomer(customer);
+
+                                        // Register user with the SAME ID as username and default password
+                                        controller.registerUser(id, password, "customer");
+
                                         refreshCustomerTable();
+
                                         Alert alert = new Alert(Alert.AlertType.INFORMATION);
                                         alert.setTitle("Success");
                                         alert.setHeaderText(null);
-                                        alert.setContentText("Customer created successfully!");
+                                        alert.setContentText("Customer created successfully!\nUsername: " + id
+                                                        + "\nPassword: " + password);
                                         alert.showAndWait();
                                 } else {
                                         Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -510,7 +516,7 @@ public class EmployeeDashboardGUI {
                 Dialog<Void> dialog = new Dialog<>();
                 dialog.setTitle("Create Account for Customer");
                 dialog.setHeaderText("Create a new account for " + selectedCustomer.getFirstName() + " "
-                                + selectedCustomer.getLastName());
+                                + selectedCustomer.getLastName() + " (ID: " + selectedCustomer.getId() + ")");
 
                 ButtonType createButtonType = new ButtonType("Create", ButtonBar.ButtonData.OK_DONE);
                 dialog.getDialogPane().getButtonTypes().addAll(createButtonType, ButtonType.CANCEL);
@@ -524,49 +530,80 @@ public class EmployeeDashboardGUI {
                 cbAccountType.getItems().addAll("ChequingAccount", "SavingsAccount", "InvestmentAccount");
                 cbAccountType.setPromptText("Select Account Type");
 
-                grid.add(new Label("Account Type:"), 0, 0);
-                grid.add(cbAccountType, 1, 0);
+                TextField txtInitialDeposit = new TextField();
+                txtInitialDeposit.setPromptText("Initial Deposit");
+                txtInitialDeposit.setText("0.0");
+
+                grid.add(new Label("Customer ID:"), 0, 0);
+                grid.add(new Label(selectedCustomer.getId()), 1, 0);
+                grid.add(new Label("Account Type:"), 0, 1);
+                grid.add(cbAccountType, 1, 1);
+                grid.add(new Label("Initial Deposit:"), 0, 2);
+                grid.add(txtInitialDeposit, 1, 2);
 
                 dialog.getDialogPane().setContent(grid);
 
                 dialog.setResultConverter(dialogButton -> {
                         if (dialogButton == createButtonType) {
                                 String accountType = cbAccountType.getValue();
-                                if (accountType != null && !accountType.isEmpty()) {
+                                String depositText = txtInitialDeposit.getText();
+                                if (accountType != null && !accountType.isEmpty() && depositText != null && !depositText.isEmpty()) {
                                         try {
+                                                double initialDeposit = Double.parseDouble(depositText);
+                                                
+                                                // Validate minimum balance for InvestmentAccount
+                                                if ("InvestmentAccount".equals(accountType) && initialDeposit < 500.0) {
+                                                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                                                        alert.setTitle("Error");
+                                                        alert.setHeaderText(null);
+                                                        alert.setContentText("Investment account requires minimum BWP500.00");
+                                                        alert.showAndWait();
+                                                        return null;
+                                                }
+                                                
                                                 Account newAccount = null;
                                                 String accountNumber = generateAccountNumber(accountType);
+                                                
+                                                System.out.println("DEBUG: Creating account " + accountNumber + " for customer " + selectedCustomer.getId());
+                                                
                                                 if ("ChequingAccount".equals(accountType)) {
-                                                        newAccount = new ChequingAccount(accountNumber, 0.0,
-                                                                        "MainBranch", selectedCustomer);
+                                                        newAccount = new ChequingAccount(accountNumber, initialDeposit, "MainBranch", selectedCustomer);
                                                 } else if ("SavingsAccount".equals(accountType)) {
-                                                        newAccount = new SavingsAccount(accountNumber, 0.0,
-                                                                        "MainBranch", selectedCustomer);
+                                                        newAccount = new SavingsAccount(accountNumber, initialDeposit, "MainBranch", selectedCustomer);
                                                 } else if ("InvestmentAccount".equals(accountType)) {
-                                                        newAccount = new InvestmentAccount(accountNumber, 500.0,
-                                                                        "MainBranch", selectedCustomer);
+                                                        newAccount = new InvestmentAccount(accountNumber, initialDeposit, "MainBranch", selectedCustomer);
                                                 }
+                                                
                                                 if (newAccount != null) {
+                                                        System.out.println("DEBUG: Account object created, calling controller.openAccount()");
                                                         controller.openAccount(newAccount);
                                                         refreshAccountTable();
                                                         Alert alert = new Alert(Alert.AlertType.INFORMATION);
                                                         alert.setTitle("Success");
                                                         alert.setHeaderText(null);
-                                                        alert.setContentText("Account created successfully!");
+                                                        alert.setContentText("Account " + accountNumber + " created successfully for customer " + selectedCustomer.getId() + "!");
                                                         alert.showAndWait();
+                                                        System.out.println("DEBUG: Account creation completed");
                                                 }
+                                        } catch (NumberFormatException e) {
+                                                Alert alert = new Alert(Alert.AlertType.ERROR);
+                                                alert.setTitle("Error");
+                                                alert.setHeaderText(null);
+                                                alert.setContentText("Please enter a valid amount for initial deposit.");
+                                                alert.showAndWait();
                                         } catch (Exception e) {
                                                 Alert alert = new Alert(Alert.AlertType.ERROR);
                                                 alert.setTitle("Error");
                                                 alert.setHeaderText(null);
-                                                alert.setContentText("Failed to create account.");
+                                                alert.setContentText("Failed to create account: " + e.getMessage());
                                                 alert.showAndWait();
+                                                e.printStackTrace();
                                         }
                                 } else {
                                         Alert alert = new Alert(Alert.AlertType.ERROR);
                                         alert.setTitle("Error");
                                         alert.setHeaderText(null);
-                                        alert.setContentText("Please select an account type.");
+                                        alert.setContentText("Please select an account type and enter initial deposit.");
                                         alert.showAndWait();
                                 }
                         }

@@ -17,57 +17,107 @@ public class CustomerDashboardGUI {
     private VBox view;
     private BankingSystemController controller;
     private String customerId;
+    private Stage stage;
 
-    private TableView<Account> accountTable;
+    private ComboBox<Account> accountComboBox;
     private TableView<Transaction> transactionTable;
+    private Label balanceLabel;
+    private Label lblTitle;
+    private Label lblSelectAccount;
+    private Label lblTransactionHistory;
 
     public CustomerDashboardGUI(BankingSystemController controller, Stage stage, String customerId) {
         this.controller = controller;
+        this.stage = stage;
         this.customerId = customerId;
 
+        initializeComponents();
+        setupLayout();
+        setupEventHandlers();
+        
+        // Load accounts after all components are initialized
+        refreshAccountComboBox();
+    }
+
+    private void initializeComponents() {
         view = new VBox(15);
         view.setPadding(new Insets(20));
 
-        Label lblTitle = new Label("Customer Dashboard");
+        lblTitle = new Label("Customer Dashboard - Welcome " + customerId);
+        
+        // Account Selection
+        lblSelectAccount = new Label("Select Account:");
+        accountComboBox = new ComboBox<>();
+        accountComboBox.setPromptText("Choose an account");
+        accountComboBox.setPrefWidth(300);
+        
+        // Balance Display - MUST be initialized before refreshAccountComboBox is called
+        balanceLabel = new Label("Balance: BWP 0.00");
+        balanceLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
 
-        // --- Account Table ---
-        accountTable = new TableView<>();
-        TableColumn<Account, String> colAccNum = new TableColumn<>("Account Number");
-        colAccNum.setCellValueFactory(
-                c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getAccountNumber()));
-        TableColumn<Account, String> colType = new TableColumn<>("Type");
-        colType.setCellValueFactory(
-                c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getClass().getSimpleName()));
-        TableColumn<Account, String> colBalance = new TableColumn<>("Balance");
-        colBalance.setCellValueFactory(
-                c -> new javafx.beans.property.SimpleStringProperty(String.valueOf(c.getValue().getBalance())));
-        accountTable.getColumns().addAll(colAccNum, colType, colBalance);
-
-        accountTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
-            if (newSelection != null)
-                refreshTransactionTable(newSelection);
-        });
-
-        refreshAccountTable();
-
-        // --- Transaction Table ---
+        // Transaction Table
         transactionTable = new TableView<>();
+        setupTransactionTable();
+        
+        lblTransactionHistory = new Label("Transaction History:");
+    }
+
+    private void setupTransactionTable() {
         TableColumn<Transaction, String> colTxnId = new TableColumn<>("Transaction ID");
         colTxnId.setCellValueFactory(
                 c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getTransactionId()));
+        
         TableColumn<Transaction, String> colTxnType = new TableColumn<>("Type");
         colTxnType.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getType()));
+        
         TableColumn<Transaction, String> colAmount = new TableColumn<>("Amount");
         colAmount.setCellValueFactory(
                 c -> new javafx.beans.property.SimpleStringProperty(String.valueOf(c.getValue().getAmount())));
+        
         TableColumn<Transaction, String> colDate = new TableColumn<>("Date/Time");
         colDate.setCellValueFactory(
                 c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getTimestamp().toString()));
-        transactionTable.getColumns().addAll(colTxnId, colTxnType, colAmount, colDate);
+        
+        // Add columns individually to avoid generic array warning
+        transactionTable.getColumns().add(colTxnId);
+        transactionTable.getColumns().add(colTxnType);
+        transactionTable.getColumns().add(colAmount);
+        transactionTable.getColumns().add(colDate);
+    }
 
-        // --- Buttons ---
+    private void setupLayout() {
+        // Set cell factory for account combo box
+        accountComboBox.setCellFactory(param -> new ListCell<Account>() {
+            @Override
+            protected void updateItem(Account account, boolean empty) {
+                super.updateItem(account, empty);
+                if (empty || account == null) {
+                    setText(null);
+                } else {
+                    setText(account.getAccountNumber() + " - " + 
+                           account.getClass().getSimpleName() + " - BWP" + 
+                           String.format("%.2f", account.getBalance()));
+                }
+            }
+        });
+        
+        accountComboBox.setButtonCell(new ListCell<Account>() {
+            @Override
+            protected void updateItem(Account account, boolean empty) {
+                super.updateItem(account, empty);
+                if (empty || account == null) {
+                    setText("Select an account");
+                } else {
+                    setText(account.getAccountNumber() + " - " + 
+                           account.getClass().getSimpleName() + " - BWP" + 
+                           String.format("%.2f", account.getBalance()));
+                }
+            }
+        });
+
+        // Buttons
         Button btnRefresh = new Button("Refresh");
-        btnRefresh.setOnAction(e -> refreshAccountTable());
+        btnRefresh.setOnAction(e -> refreshAccountComboBox());
 
         Button btnDeposit = new Button("Deposit");
         btnDeposit.setOnAction(e -> showDepositDialog());
@@ -82,54 +132,85 @@ public class CustomerDashboardGUI {
         btnInterest.setOnAction(e -> applyInterest());
 
         Button btnLogout = new Button("Logout");
-        btnLogout.setOnAction(e -> stage.getScene().setRoot(new LoginGUI(stage).getView()));
+        btnLogout.setOnAction(e -> {
+            LoginGUI loginGUI = new LoginGUI(stage);
+            stage.getScene().setRoot(loginGUI.getView());
+        });
 
         HBox buttonBox = new HBox(10, btnRefresh, btnDeposit, btnWithdraw, btnTransfer, btnInterest, btnLogout);
 
-        view.getChildren().addAll(lblTitle, accountTable, buttonBox, new Label("Transaction History:"),
-                transactionTable);
+        // Add all components to view
+        view.getChildren().addAll(
+            lblTitle,
+            new HBox(10, lblSelectAccount, accountComboBox),
+            balanceLabel,
+            buttonBox,
+            lblTransactionHistory,
+            transactionTable
+        );
     }
 
-    // --- Refresh Account Table ---
-    private void refreshAccountTable() {
-        Account selectedAccount = accountTable.getSelectionModel().getSelectedItem();
-        String selectedAccountNumber = selectedAccount != null ? selectedAccount.getAccountNumber() : null;
-
-        ObservableList<Account> list = FXCollections.observableArrayList(controller.getCustomerAccounts(customerId));
-        accountTable.setItems(list);
-
-        if (!list.isEmpty()) {
-            if (selectedAccountNumber != null) {
-                // Re-select the previously selected account if it still exists
-                for (Account acc : list) {
-                    if (acc.getAccountNumber().equals(selectedAccountNumber)) {
-                        accountTable.getSelectionModel().select(acc);
-                        refreshTransactionTable(acc);
-                        return;
-                    }
-                }
+    private void setupEventHandlers() {
+        // Update display when account selection changes
+        accountComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                updateAccountDisplay(newVal);
+            } else {
+                // Clear display when no account is selected
+                balanceLabel.setText("Balance: BWP 0.00");
+                transactionTable.setItems(FXCollections.observableArrayList());
             }
-            // If no previous selection or not found, select the first account
-            refreshTransactionTable(list.get(0));
+        });
+    }
+
+    // --- Refresh Account ComboBox ---
+    private void refreshAccountComboBox() {
+        System.out.println("DEBUG: Loading accounts for customer: " + customerId);
+        ObservableList<Account> accounts = FXCollections.observableArrayList(
+            controller.getCustomerAccounts(customerId)
+        );
+        
+        System.out.println("DEBUG: Found " + accounts.size() + " accounts for customer " + customerId);
+        for (Account acc : accounts) {
+            System.out.println("DEBUG: Account " + acc.getAccountNumber() + " - Balance: " + acc.getBalance());
+        }
+        
+        accountComboBox.setItems(accounts);
+        
+        if (!accounts.isEmpty()) {
+            Account currentSelection = accountComboBox.getValue();
+            if (currentSelection == null) {
+                accountComboBox.getSelectionModel().selectFirst();
+            } else {
+                // Refresh the current selection data
+                updateAccountDisplay(currentSelection);
+            }
+        } else {
+            // Safe check - ensure balanceLabel is initialized
+            if (balanceLabel != null) {
+                balanceLabel.setText("No accounts found");
+            }
+            transactionTable.setItems(FXCollections.observableArrayList());
         }
     }
 
-    // --- Refresh Transaction Table ---
-    private void refreshTransactionTable(Account account) {
-        ObservableList<Transaction> txnList = FXCollections
+    // --- Update Display for Selected Account ---
+    private void updateAccountDisplay(Account account) {
+        if (account != null && balanceLabel != null) {
+            balanceLabel.setText("Balance: BWP " + String.format("%.2f", account.getBalance()));
+            
+            // Load transactions for this account
+            ObservableList<Transaction> txnList = FXCollections
                 .observableArrayList(controller.getAccountTransactions(account.getAccountNumber()));
-        transactionTable.setItems(txnList);
+            transactionTable.setItems(txnList);
+        }
     }
 
     // --- Deposit Dialog ---
     private void showDepositDialog() {
-        Account selected = accountTable.getSelectionModel().getSelectedItem();
+        Account selected = accountComboBox.getValue();
         if (selected == null) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText(null);
-            alert.setContentText("Please select an account to deposit to.");
-            alert.showAndWait();
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to deposit to.");
             return;
         }
 
@@ -140,41 +221,25 @@ public class CustomerDashboardGUI {
         dialog.showAndWait().ifPresent(amountStr -> {
             try {
                 double amount = Double.parseDouble(amountStr);
-                controller.depositToAccount(selected.getAccountNumber(), amount);
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("Success");
-                alert.setHeaderText(null);
-                alert.setContentText("Deposit successful!");
-                alert.showAndWait();
-                String selectedAccountNumber = selected.getAccountNumber();
-                refreshAccountTable();
-                // Re-select the account to update transactions
-                for (Account acc : accountTable.getItems()) {
-                    if (acc.getAccountNumber().equals(selectedAccountNumber)) {
-                        accountTable.getSelectionModel().select(acc);
-                        refreshTransactionTable(acc);
-                        break;
-                    }
+                if (amount <= 0) {
+                    showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Please enter a positive amount.");
+                    return;
                 }
+                
+                controller.depositToAccount(selected.getAccountNumber(), amount);
+                showAlert(Alert.AlertType.INFORMATION, "Success", "Deposit successful!");
+                refreshAccountComboBox();
             } catch (NumberFormatException e) {
-                Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setTitle("Invalid Amount");
-                alert.setHeaderText(null);
-                alert.setContentText("Please enter a valid amount.");
-                alert.showAndWait();
+                showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Please enter a valid amount.");
             }
         });
     }
 
     // --- Withdraw Dialog ---
     private void showWithdrawDialog() {
-        Account selected = accountTable.getSelectionModel().getSelectedItem();
+        Account selected = accountComboBox.getValue();
         if (selected == null) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText(null);
-            alert.setContentText("Please select an account to withdraw from.");
-            alert.showAndWait();
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to withdraw from.");
             return;
         }
 
@@ -185,45 +250,35 @@ public class CustomerDashboardGUI {
         dialog.showAndWait().ifPresent(amountStr -> {
             try {
                 double amount = Double.parseDouble(amountStr);
+                if (amount <= 0) {
+                    showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Please enter a positive amount.");
+                    return;
+                }
+                
                 boolean success = controller.withdrawFromAccount(selected.getAccountNumber(), amount);
                 if (success) {
-                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                    alert.setTitle("Success");
-                    alert.setHeaderText(null);
-                    alert.setContentText("Withdrawal successful!");
-                    alert.showAndWait();
-                    String selectedAccountNumber = selected.getAccountNumber();
-                    refreshAccountTable();
-                    // Re-select the account to update transactions
-                    for (Account acc : accountTable.getItems()) {
-                        if (acc.getAccountNumber().equals(selectedAccountNumber)) {
-                            accountTable.getSelectionModel().select(acc);
-                            refreshTransactionTable(acc);
-                            break;
-                        }
-                    }
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Withdrawal successful!");
+                    refreshAccountComboBox();
                 } else {
-                    Alert alert = new Alert(Alert.AlertType.ERROR);
-                    alert.setTitle("Error");
-                    alert.setHeaderText(null);
-                    alert.setContentText("Withdrawal failed. Insufficient funds.");
-                    alert.showAndWait();
+                    showAlert(Alert.AlertType.ERROR, "Error", "Withdrawal failed. Insufficient funds or account type doesn't allow withdrawals.");
                 }
             } catch (NumberFormatException e) {
-                Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setTitle("Invalid Amount");
-                alert.setHeaderText(null);
-                alert.setContentText("Please enter a valid amount.");
-                alert.showAndWait();
+                showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Please enter a valid amount.");
             }
         });
     }
 
     // --- Transfer Dialog ---
     private void showTransferDialog() {
+        Account selectedFrom = accountComboBox.getValue();
+        if (selectedFrom == null) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to transfer from.");
+            return;
+        }
+
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Transfer Funds");
-        dialog.setHeaderText("Transfer between your accounts");
+        dialog.setHeaderText("Transfer from: " + selectedFrom.getAccountNumber());
 
         ButtonType transferButtonType = new ButtonType("Transfer", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(transferButtonType, ButtonType.CANCEL);
@@ -233,15 +288,13 @@ public class CustomerDashboardGUI {
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
-        TextField txtFromAccount = new TextField();
-        txtFromAccount.setPromptText("From Account Number");
         TextField txtToAccount = new TextField();
         txtToAccount.setPromptText("To Account Number");
         TextField txtAmount = new TextField();
         txtAmount.setPromptText("Amount");
 
         grid.add(new Label("From Account:"), 0, 0);
-        grid.add(txtFromAccount, 1, 0);
+        grid.add(new Label(selectedFrom.getAccountNumber()), 1, 0);
         grid.add(new Label("To Account:"), 0, 1);
         grid.add(txtToAccount, 1, 1);
         grid.add(new Label("Amount:"), 0, 2);
@@ -251,41 +304,30 @@ public class CustomerDashboardGUI {
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == transferButtonType) {
-                String fromAcc = txtFromAccount.getText();
                 String toAcc = txtToAccount.getText();
                 String amountStr = txtAmount.getText();
-                if (fromAcc != null && !fromAcc.isEmpty() && toAcc != null && !toAcc.isEmpty() && amountStr != null
-                        && !amountStr.isEmpty()) {
+                if (toAcc != null && !toAcc.isEmpty() && amountStr != null && !amountStr.isEmpty()) {
                     try {
                         double amount = Double.parseDouble(amountStr);
-                        boolean success = controller.transferFunds(fromAcc, toAcc, amount);
+                        if (amount <= 0) {
+                            showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Please enter a positive amount.");
+                            return null;
+                        }
+                        
+                        boolean success = controller.transferFunds(selectedFrom.getAccountNumber(), toAcc, amount);
                         if (success) {
-                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                            alert.setTitle("Transfer Successful");
-                            alert.setHeaderText(null);
-                            alert.setContentText("Transferred " + amount + " from " + fromAcc + " to " + toAcc);
-                            alert.showAndWait();
-                            refreshAccountTable();
+                            showAlert(Alert.AlertType.INFORMATION, "Transfer Successful", 
+                                "Transferred BWP" + amount + " from " + selectedFrom.getAccountNumber() + " to " + toAcc);
+                            refreshAccountComboBox();
                         } else {
-                            Alert alert = new Alert(Alert.AlertType.ERROR);
-                            alert.setTitle("Transfer Failed");
-                            alert.setHeaderText(null);
-                            alert.setContentText("Transfer failed. Check account numbers and balance.");
-                            alert.showAndWait();
+                            showAlert(Alert.AlertType.ERROR, "Transfer Failed", 
+                                "Transfer failed. Check account numbers and balance.");
                         }
                     } catch (NumberFormatException e) {
-                        Alert alert = new Alert(Alert.AlertType.ERROR);
-                        alert.setTitle("Invalid Amount");
-                        alert.setHeaderText(null);
-                        alert.setContentText("Please enter a valid amount.");
-                        alert.showAndWait();
+                        showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Please enter a valid amount.");
                     }
                 } else {
-                    Alert alert = new Alert(Alert.AlertType.ERROR);
-                    alert.setTitle("Error");
-                    alert.setHeaderText(null);
-                    alert.setContentText("Please fill in all fields.");
-                    alert.showAndWait();
+                    showAlert(Alert.AlertType.ERROR, "Error", "Please fill in all fields.");
                 }
             }
             return null;
@@ -296,33 +338,25 @@ public class CustomerDashboardGUI {
 
     // --- Apply Interest ---
     private void applyInterest() {
-        Account selected = accountTable.getSelectionModel().getSelectedItem();
+        Account selected = accountComboBox.getValue();
         if (selected == null) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText(null);
-            alert.setContentText("Please select an account to apply interest to.");
-            alert.showAndWait();
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an account to apply interest to.");
             return;
         }
 
         double interest = controller.applyInterest(selected.getAccountNumber());
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Interest Applied");
-        alert.setHeaderText(null);
-        alert.setContentText("Interest of " + interest + " applied to account " + selected.getAccountNumber());
-        alert.showAndWait();
+        showAlert(Alert.AlertType.INFORMATION, "Interest Applied", 
+            "Interest of BWP" + String.format("%.2f", interest) + " applied to account " + selected.getAccountNumber());
+        refreshAccountComboBox();
+    }
 
-        String selectedAccountNumber = selected.getAccountNumber();
-        refreshAccountTable();
-        // Re-select the account to update transactions
-        for (Account acc : accountTable.getItems()) {
-            if (acc.getAccountNumber().equals(selectedAccountNumber)) {
-                accountTable.getSelectionModel().select(acc);
-                refreshTransactionTable(acc);
-                break;
-            }
-        }
+    // --- Helper method for alerts ---
+    private void showAlert(Alert.AlertType alertType, String title, String message) {
+        Alert alert = new Alert(alertType);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     public VBox getView() {
